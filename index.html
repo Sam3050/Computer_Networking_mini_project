@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sentry Sweep — Network Vulnerability Detection & Analysis</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<script src="js/shell.js"></script>
+<script src="js/ui-helpers.js"></script>
+<script>Shell.render("dashboard", "Dashboard");</script>
+
+<script>
+document.getElementById("content").innerHTML = `
+
+  <section class="hero">
+    <svg class="radar" viewBox="0 0 200 200" fill="none">
+      <circle cx="100" cy="100" r="90" stroke="#E8A33D" stroke-width="1"/>
+      <circle cx="100" cy="100" r="62" stroke="#E8A33D" stroke-width="1"/>
+      <circle cx="100" cy="100" r="34" stroke="#E8A33D" stroke-width="1"/>
+      <line x1="100" y1="10" x2="100" y2="190" stroke="#E8A33D" stroke-width="0.6"/>
+      <line x1="10" y1="100" x2="190" y2="100" stroke="#E8A33D" stroke-width="0.6"/>
+      <circle cx="132" cy="70" r="3" fill="#E8A33D"/>
+      <circle cx="70" cy="140" r="2" fill="#E8A33D" opacity="0.6"/>
+    </svg>
+    <div class="hero__kicker"><span class="dot"></span> Network Vulnerability Detection & Analysis System</div>
+    <h1>Know what's listening on your network before someone else finds it.</h1>
+    <p>Sentry Sweep discovers active hosts, enumerates open ports and running services, and flags insecure protocols and misconfigurations — then explains the impact and how to fix each one, in plain language.</p>
+    <div class="hero__actions">
+      <a class="btn btn--primary" href="scan.html">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+        Start a new scan
+      </a>
+      <a class="btn" href="about.html">View methodology</a>
+    </div>
+  </section>
+
+  <div class="statgrid" id="statgrid"></div>
+
+  <div class="twocol">
+    <div class="card">
+      <div class="card__head">
+        <span class="card__title">Recent scans</span>
+        <a class="btn btn--ghost" href="scan.html" style="padding:6px 12px;">New scan</a>
+      </div>
+      <div id="recent-body"></div>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><span class="card__title">What gets checked</span></div>
+      <div class="card__body">
+        <ul class="checklist">
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Open ports across common service ranges</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Insecure protocols — HTTP, FTP, Telnet</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Exposed or unused network services</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Basic security misconfigurations</li>
+          <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Risk scoring & mitigation guidance</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+`;
+
+function loadHistory() {
+  try { return JSON.parse(localStorage.getItem("sentrysweep_history") || "[]"); }
+  catch (e) { return []; }
+}
+
+const history = loadHistory();
+const last = history[0];
+
+const statgrid = document.getElementById("statgrid");
+if (last) {
+  statgrid.innerHTML = `
+    <div class="stat"><div class="stat__num">${last.hosts.length}</div><div class="stat__label">ACTIVE HOSTS (LAST SCAN)</div></div>
+    <div class="stat stat--critical"><div class="stat__num">${last.counts.critical}</div><div class="stat__label">CRITICAL FINDINGS</div></div>
+    <div class="stat stat--high"><div class="stat__num">${last.counts.high}</div><div class="stat__label">HIGH FINDINGS</div></div>
+    <div class="stat"><div class="stat__num">${last.riskScore}</div><div class="stat__label">SECURITY SCORE / 100</div></div>
+  `;
+} else {
+  statgrid.innerHTML = `
+    <div class="stat"><div class="stat__num">—</div><div class="stat__label">ACTIVE HOSTS</div></div>
+    <div class="stat"><div class="stat__num">—</div><div class="stat__label">CRITICAL FINDINGS</div></div>
+    <div class="stat"><div class="stat__num">—</div><div class="stat__label">HIGH FINDINGS</div></div>
+    <div class="stat"><div class="stat__num">—</div><div class="stat__label">SECURITY SCORE</div></div>
+  `;
+}
+
+const recentBody = document.getElementById("recent-body");
+if (history.length === 0) {
+  recentBody.innerHTML = `
+    <div class="empty">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+      <div class="empty__title">No scans yet</div>
+      <div class="empty__body">Run your first scan to see active hosts, open ports and vulnerabilities appear here.</div>
+    </div>`;
+} else {
+  recentBody.innerHTML = `<table>
+    <thead><tr><th>Target</th><th>Date</th><th>Hosts</th><th>Findings</th><th>Rating</th><th></th></tr></thead>
+    <tbody>
+      ${history.slice(0, 6).map((r, i) => `
+        <tr>
+          <td class="mono emph">${UIHelpers.escapeHtml(r.target)}</td>
+          <td>${UIHelpers.fmtDate(r.generatedAt)}</td>
+          <td>${r.hosts.length}</td>
+          <td>${r.findings.length}</td>
+          <td>${UIHelpers.severityBadge(r.counts.critical > 0 ? "critical" : r.counts.high > 0 ? "high" : r.counts.medium > 0 ? "medium" : "low")} ${r.overallRating}</td>
+          <td><a class="btn btn--ghost" style="padding:5px 10px;" href="report.html?i=${i}">View →</a></td>
+        </tr>`).join("")}
+    </tbody>
+  </table>`;
+}
+</script>
+</body>
+</html>

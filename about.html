@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Methodology — Sentry Sweep</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<script src="js/shell.js"></script>
+<script>Shell.render("about", "Methodology");</script>
+
+<script>
+document.getElementById("content").innerHTML = `
+  <h1 style="font-size:22px; margin-bottom:8px;">How the system works</h1>
+  <p style="max-width:600px; margin-bottom:30px;">Sentry Sweep follows the same pipeline a Python-based scanner would run: discover hosts, enumerate ports and services, analyze what's found against known risk patterns, then score and report it.</p>
+
+  <div class="card" style="margin-bottom:28px;">
+    <div class="card__body">
+      <div class="methodology-step">
+        <div class="methodology-step__num">1</div>
+        <div><h4>Host discovery</h4><p>The target range is swept to identify which addresses respond — the equivalent of an ICMP/TCP sweep across the subnet in a Python socket implementation (<code>socket</code>, <code>concurrent.futures</code> for parallelism).</p></div>
+      </div>
+      <div class="methodology-step">
+        <div class="methodology-step__num">2</div>
+        <div><h4>Port & service enumeration</h4><p>Each active host is probed across common service ports (21, 22, 23, 25, 53, 80, 110, 143, 443, 445, 3306, 3389, 5900, 8080, 161). Open ports are matched to their service and, where possible, a banner is captured.</p></div>
+      </div>
+      <div class="methodology-step">
+        <div class="methodology-step__num">3</div>
+        <div><h4>Vulnerability analysis</h4><p>Detected services are checked against a rule set covering insecure protocols (HTTP, FTP, Telnet), exposed administrative services (RDP, VNC, SMB, databases), and common misconfigurations (default SNMP community strings, outdated banners).</p></div>
+      </div>
+      <div class="methodology-step">
+        <div class="methodology-step__num">4</div>
+        <div><h4>Risk scoring & reporting</h4><p>Each finding is weighted by severity (critical / high / medium / low) into an aggregate security score, and a full report is generated with impact explanations and mitigation steps for every finding.</p></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-bottom:28px; border-color: var(--accent-soft);">
+    <div class="card__head"><span class="card__title">A note on how this demo runs</span></div>
+    <div class="card__body">
+      <p>Browsers intentionally cannot open raw sockets or scan arbitrary hosts on a network — that restriction is what keeps random websites from port-scanning your LAN. So the interface here runs on a simulation engine (<code class="mono">js/scanner.js</code>) that reproduces exactly what the Python backend in the project brief would return: the same phases, the same port/service knowledge base, and the same vulnerability rules, deterministically seeded from your target input.</p>
+      <p style="margin-top:10px;">To make it live, replace the functions in <code class="mono">js/scanner.js</code> (<code class="mono">findActiveHosts</code>, <code class="mono">scanPorts</code>, <code class="mono">analyzeVulnerabilities</code>) with calls to a small Python API — e.g. a Flask/FastAPI backend wrapping <code class="mono">socket</code> and <code class="mono">nmap</code>/<code class="mono">python-nmap</code> — and return JSON in the same shape this engine already produces. No other page needs to change.</p>
+    </div>
+  </div>
+
+  <div class="twocol">
+    <div class="card">
+      <div class="card__head"><span class="card__title">Checks covered</span></div>
+      <div class="card__body">
+        <div class="tag-list">
+          <span class="tag">Open ports</span>
+          <span class="tag">Telnet exposure</span>
+          <span class="tag">FTP exposure</span>
+          <span class="tag">Plain HTTP</span>
+          <span class="tag">SMB exposure</span>
+          <span class="tag">RDP exposure</span>
+          <span class="tag">Exposed databases</span>
+          <span class="tag">VNC exposure</span>
+          <span class="tag">SNMP default community</span>
+          <span class="tag">Plaintext mail</span>
+          <span class="tag">Outdated banners</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card__head"><span class="card__title">Suggested Python stack</span></div>
+      <div class="card__body">
+        <div class="tag-list">
+          <span class="tag">socket</span>
+          <span class="tag">python-nmap</span>
+          <span class="tag">concurrent.futures</span>
+          <span class="tag">Flask / FastAPI</span>
+          <span class="tag">Jinja2 / ReportLab (PDF export)</span>
+          <span class="tag">SQLite (scan history)</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <h2 style="font-size:16px; margin-bottom:14px;">Future scope</h2>
+  <div class="card">
+    <div class="card__body">
+      <ul class="checklist">
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> AI-based risk prediction from historical scan trends</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Machine learning-assisted vulnerability classification</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Live CVE database integration for banner-matched CVEs</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Automated email alerts on new critical findings</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Scheduled, recurring network scans</li>
+        <li><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg> Interactive dashboard with historical charts & statistics</li>
+      </ul>
+    </div>
+  </div>
+`;
+</script>
+</body>
+</html>

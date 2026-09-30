@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>New Scan — Sentry Sweep</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="css/base.css">
+<link rel="stylesheet" href="css/pages.css">
+</head>
+<body>
+
+<script src="js/shell.js"></script>
+<script src="js/ui-helpers.js"></script>
+<script src="js/scanner.js"></script>
+<script>Shell.render("scan", "New Scan");</script>
+
+<script>
+document.getElementById("content").innerHTML = `
+  <h1 style="font-size:22px; margin-bottom:6px;">Configure and run a scan</h1>
+  <p style="margin-bottom:26px; max-width:560px;">Enter a target range, choose what to check for, and Sentry Sweep will discover hosts, enumerate services, and flag anything worth your attention.</p>
+
+  <div class="scan-layout">
+    <div class="card">
+      <div class="card__head"><span class="card__title">Scan parameters</span></div>
+      <div class="card__body">
+        <div class="field">
+          <label class="field__label" for="target">Target range</label>
+          <input class="input" id="target" value="192.168.1.0/24" placeholder="e.g. 192.168.1.0/24">
+          <span class="field__hint">IP, hostname, or CIDR range</span>
+        </div>
+
+        <div class="field">
+          <label class="field__label">Checks to run</label>
+          <label class="checkrow"><input type="checkbox" checked disabled> Open port enumeration</label>
+          <label class="checkrow"><input type="checkbox" id="chk-insecure" checked> Insecure protocols (HTTP, FTP, Telnet)</label>
+          <label class="checkrow"><input type="checkbox" id="chk-exposed" checked> Exposed / unused services</label>
+          <label class="checkrow"><input type="checkbox" id="chk-misconfig" checked> Basic misconfigurations</label>
+        </div>
+
+        <div class="field">
+          <label class="field__label" for="depth">Scan depth</label>
+          <select class="input" id="depth">
+            <option value="quick">Quick — common ports only</option>
+            <option value="standard" selected>Standard — full service set</option>
+          </select>
+        </div>
+
+        <button class="btn btn--primary" id="run-btn" style="width:100%; justify-content:center; margin-top:4px;">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+          Run scan
+        </button>
+      </div>
+    </div>
+
+    <div>
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card__head">
+          <span class="card__title">Live console</span>
+          <span class="scan-status-pill" id="status-pill">Idle</span>
+        </div>
+        <div class="card__body">
+          <div class="progressbar"><div class="progressbar__fill" id="progress-fill"></div></div>
+          <div class="console" id="console"></div>
+        </div>
+      </div>
+
+      <div id="results"></div>
+    </div>
+  </div>
+`;
+
+/* ---------------- scan run logic ---------------- */
+
+const consoleEl = document.getElementById("console");
+const fillEl = document.getElementById("progress-fill");
+const pillEl = document.getElementById("status-pill");
+const resultsEl = document.getElementById("results");
+const runBtn = document.getElementById("run-btn");
+
+function logLine(text, cls) {
+  const line = document.createElement("div");
+  line.className = "console__line" + (cls ? " console__line--" + cls : "");
+  line.textContent = text;
+  consoleEl.appendChild(line);
+  consoleEl.scrollTop = consoleEl.scrollHeight;
+}
+
+function setProgress(pct) { fillEl.style.width = pct + "%"; }
+
+function sleep(ms) { return new Promise((r) => setTimeout(r, ms)); }
+
+async function runScan() {
+  const target = document.getElementById("target").value.trim() || "192.168.1.0/24";
+  const options = {
+    checkInsecure: document.getElementById("chk-insecure").checked,
+    checkExposed: document.getElementById("chk-exposed").checked,
+    checkMisconfig: document.getElementById("chk-misconfig").checked,
+    salt: document.getElementById("depth").value + Date.now(), // fresh each run
+  };
+
+  runBtn.disabled = true;
+  consoleEl.innerHTML = "";
+  resultsEl.innerHTML = "";
+  pillEl.textContent = "Running";
+  pillEl.className = "scan-status-pill is-running";
+  setProgress(4);
+
+  logLine(`$ sentrysweep scan --target ${target} --mode standard`, "muted");
+  await sleep(280);
+  logLine("Initializing scan engine...", "muted");
+  await sleep(220);
+  logLine(`Resolving target ${target}...`);
+  await sleep(320);
+  setProgress(14);
+
+  const result = SentryScanner.runScan(target, options);
+
+  logLine(`Host discovery: ${result.hosts.length} active host(s) responded`, "ok");
+  await sleep(200);
+
+  let progressPerHost = 70 / Math.max(result.hosts.length, 1);
+  let progress = 14;
+
+  for (const host of result.hosts) {
+    await sleep(260);
+    logLine(`→ ${host.ip} (${host.hostname}) is up — ${host.latencyMs}ms`);
+    await sleep(180);
+    logLine(`  scanning ports on ${host.ip}...`, "muted");
+    await sleep(260);
+    if (host.openPorts.length) {
+      logLine(`  ${host.openPorts.length} open port(s): ${host.openPorts.map(p => p.port + "/" + p.proto).join(", ")}`, "ok");
+    }
+    const bad = host.vulnerabilities.filter(v => v.severity === "critical" || v.severity === "high");
+    if (bad.length) {
+      logLine(`  ⚠ ${bad.length} high-impact finding(s) on ${host.ip}`, bad.some(b=>b.severity==="critical") ? "bad" : "warn");
+    }
+    progress += progressPerHost;
+    setProgress(Math.min(progress, 86));
+  }
+
+  await sleep(200);
+  logLine("Cross-referencing services against known misconfiguration patterns...", "muted");
+  await sleep(420);
+  setProgress(95);
+  logLine(`Analysis complete — ${result.findings.length} total finding(s) across ${result.hosts.length} host(s)`, "ok");
+  setProgress(100);
+  pillEl.textContent = "Complete";
+  pillEl.className = "scan-status-pill is-done";
+
+  renderResults(result);
+  saveToHistory(result);
+  runBtn.disabled = false;
+}
+
+function renderResults(result) {
+  const summaryCards = `
+    <div class="statgrid" style="margin-bottom:18px;">
+      <div class="stat"><div class="stat__num">${result.hosts.length}</div><div class="stat__label">ACTIVE HOSTS</div></div>
+      <div class="stat"><div class="stat__num">${result.totalOpenPorts}</div><div class="stat__label">OPEN PORTS</div></div>
+      <div class="stat stat--critical"><div class="stat__num">${result.counts.critical + result.counts.high}</div><div class="stat__label">CRITICAL + HIGH</div></div>
+      <div class="stat"><div class="stat__num">${result.riskScore}</div><div class="stat__label">SECURITY SCORE</div></div>
+    </div>`;
+
+  const hostCards = result.hosts.map(host => `
+    <div class="host-card">
+      <div class="host-card__head">
+        <div>
+          <div class="host-card__ip">${host.ip}</div>
+          <div class="host-card__meta">${host.hostname} · ${host.latencyMs}ms · ${host.openPorts.length} open port(s)</div>
+        </div>
+        ${host.vulnerabilities.length ? UIHelpers.severityBadge(host.vulnerabilities[0].severity) : '<span class="badge badge--low">CLEAN</span>'}
+      </div>
+      <table>
+        <thead><tr><th>Port</th><th>Service</th><th>Banner</th><th>State</th></tr></thead>
+        <tbody>
+          ${host.openPorts.map(p => `
+            <tr>
+              <td class="mono emph">${p.port}</td>
+              <td>${p.proto}</td>
+              <td class="mono">${p.banner}</td>
+              <td>${p.secure ? '<span class="badge badge--low">OK</span>' : '<span class="badge badge--medium">REVIEW</span>'}</td>
+            </tr>`).join("")}
+        </tbody>
+      </table>
+    </div>`).join("");
+
+  resultsEl.innerHTML = `
+    ${summaryCards}
+    <div class="card__head" style="padding:0 0 12px; border:none;"><span class="card__title">Hosts & services</span></div>
+    ${hostCards}
+    <a class="btn btn--primary" style="margin-top:8px;" href="report.html">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M14 2v6h6"/></svg>
+      Open full report
+    </a>`;
+}
+
+function saveToHistory(result) {
+  let history = [];
+  try { history = JSON.parse(localStorage.getItem("sentrysweep_history") || "[]"); } catch (e) {}
+  history.unshift(result);
+  history = history.slice(0, 20);
+  localStorage.setItem("sentrysweep_history", JSON.stringify(history));
+}
+
+runBtn.addEventListener("click", runScan);
+</script>
+</body>
+</html>
